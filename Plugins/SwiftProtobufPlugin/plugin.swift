@@ -373,10 +373,34 @@ extension SwiftProtobufPlugin: XcodeBuildToolPlugin {
         context: XcodePluginContext,
         target: XcodeTarget
     ) throws -> [Command] {
-        try createBuildCommands(
+        let protoc = target.dependencies.lazy.compactMap {
+            switch $0 {
+            case .product(let product):
+                return product
+            default:
+                return nil
+            }
+        }.first { product in
+            product.id == "swift-protobuf"
+        }.flatMap { product in
+            product?.sourceModules.first(where: { $0.name == "protoc" })
+        }
+
+        var wellKnownTypesIncludePath: URL?
+        if let protoc {
+            let candidate = protoc.directoryURL.appending(path: "include")
+            let timestamp = candidate.appending(path: "google/protobuf/timestamp.proto")
+
+            if FileManager.default.fileExists(atPath: timestamp.fileSystemPath) {
+                wellKnownTypesIncludePath = candidate
+            }
+        }
+
+        return try createBuildCommands(
             pluginWorkDirectory: context.pluginWorkDirectoryURL,
             sourceFiles: target.inputFiles,
-            tool: context.tool
+            tool: context.tool,
+            sourceTreeWellKnownTypesPath: wellKnownTypesIncludePath
         )
     }
 }
